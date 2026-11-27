@@ -1,0 +1,112 @@
+# Ambiente local: PostgreSQL + LocalStack (SQS) + migrations + criação das filas + 3 instâncias da app.
+#   docker compose up --build            → API on :3001, :3002, :3003
+#   docker compose --profile test run --rm tests
+#   docker compose --profile load run --rm load
+name: wagering
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://wagering:wagering@postgres:5432/wagering
+  AWS_ENDPOINT_URL: http://localstack:4566
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  LOG_LEVEL: info
+
+x-app: &app
+  build: { context: ., target: runtime }
+  image: wagering-processor:local
+  environment:
+    <<: *app-env
+    PORT: "3000"
+    APP_ROLES: api,consumer,outbox,pending-references
+  depends_on:
+    migrate: { condition: service_completed_successfully }
+    queues: { condition: service_completed_successfully }
+  stop_grace_period: 30s
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: wagering
+      POSTGRES_PASSWORD: wagering
+      POSTGRES_DB: wagering
+    command: ["postgres", "-c", "max_connections=300"]
+    ports: ["5432:5432"]
+    volumes:
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wagering -d wagering"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Qualquer endpoint compatível com SQS serve (MiniStack, ElasticMQ): é só apontar o AWS_ENDPOINT_URL.
+  localstack:
+    image: localstack/localstack:3.8.1
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      SQS_ENDPOINT_STRATEGY: path
+    ports: ["4566:4566"]
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:4566/_localstack/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build: { context: ., target: runtime }
+    image: wagering-processor:local
+    environment: *app-env
+    command: ["bun", "run", "scripts/migrate.ts", "up"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  queues:
+    build: { context: ., target: runtime }
+    image: wagering-processor:local
+    environment: *app-env
+    command: ["bun", "run", "scripts/create-queues.ts"]
+    depends_on:
+      localstack: { condition: service_healthy }
+
+  app-1:
+    <<: *app
+    environment: { <<: *app-env, PORT: "3000", INSTANCE_ID: app-1 }
+    ports: ["3001:3000"]
+  app-2:
+    <<: *app
+    environment: { <<: *app-env, PORT: "3000", INSTANCE_ID: app-2 }
+    ports: ["3002:3000"]
+  app-3:
+    <<: *app
+    environment: { <<: *app-env, PORT: "3000", INSTANCE_ID: app-3 }
+    ports: ["3003:3000"]
+
+  tests:
+    profiles: [test]
+    build: { context: ., target: test }
+    environment:
+      TEST_DATABASE_URL: postgresql://wagering:wagering@postgres:5432/wagering_test
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+    depends_on:
+      postgres: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  load:
+    profiles: [load]
+    build: { context: ., target: test }
+    command: ["bun", "run", "test/load/load-test.ts"]
+    environment:
+      LOAD_BASE_URLS: http://app-1:3000,http://app-2:3000,http://app-3:3000
+    depends_on:
+      app-1: { condition: service_healthy }
+      app-2: { condition: service_healthy }
+      app-3: { condition: service_healthy }
+
+volumes:
+  pgdata:
