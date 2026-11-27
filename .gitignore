@@ -1,0 +1,5 @@
+node_modules/
+*.log
+.env
+test/load/results/
+GUIA-DE-ESTUDO.md
