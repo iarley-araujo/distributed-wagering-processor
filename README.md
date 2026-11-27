@@ -7,7 +7,7 @@
 ![Bun](https://img.shields.io/badge/Bun-1.4-000000?logo=bun&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)
-![MikroORM](https://img.shields.io/badge/MikroORM-6-2B2D42)
+![MikroORM](https://img.shields.io/badge/MikroORM-6-1F2937)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 ![AWS SQS](https://img.shields.io/badge/AWS-SQS-FF9900?logo=amazonsqs&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
@@ -19,7 +19,7 @@ Processa transações (`BET → WIN | LOSS | REFUND | ROLLBACK`) recebidas de m�
 
 ### Garantias
 
-| | |
+| Garantia | Como |
 |---|---|
 | 💰 **Dinheiro exato** | `Money` em `bigint` de centavos, `NUMERIC(20,2)` no banco — nenhum `number`/float |
 | 🔒 **Sem saldo negativo, sem lost update** | lock por wallet (`SELECT … FOR UPDATE`) + update condicional por versão + `CHECK` no schema |
